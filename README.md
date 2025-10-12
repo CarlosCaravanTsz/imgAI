@@ -2,6 +2,9 @@
 ## Objectivo
 Crear una aplicación web donde los usuarios puedan subir, visualizar, organizar y gestionar imágenes de manera segura y eficiente, con un backend robusto en Go y un frontend interactivo en React.
 
+<img width="300" height="768" alt="image" src="https://github.com/user-attachments/assets/87a78de0-ebdc-40c6-ba4f-5024111d6e8c" />
+
+
 ###Arquitectura General
 Frontend (React)
 Interfaz de usuario intuitiva para:
