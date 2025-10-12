@@ -1,4 +1,4 @@
-# ImgAI
+# ImagAI
 ## Objetivo
 Crear una aplicación web donde los usuarios puedan subir, visualizar, organizar y gestionar imágenes de manera segura y eficiente, con un backend robusto en Go y un frontend interactivo en React.
 
