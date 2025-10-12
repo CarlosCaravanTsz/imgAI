@@ -1,4 +1,8 @@
-# Logs
+node_modules/
+vendor/
+.env
+
+
 logs
 *.log
 npm-debug.log*
@@ -11,6 +15,7 @@ node_modules
 dist
 dist-ssr
 *.local
+vendor
 
 # Editor directories and files
 .vscode/*
