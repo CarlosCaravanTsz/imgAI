@@ -1,16 +1,8 @@
-<<<<<<< HEAD
 node_modules/
 vendor/
 .env
-app.log
-
-ui/node_modules/
-ui/.gitignore
 
 
-=======
-# Logs
->>>>>>> frontend
 logs
 *.log
 npm-debug.log*
@@ -23,12 +15,7 @@ node_modules
 dist
 dist-ssr
 *.local
-<<<<<<< HEAD
 vendor
-=======
-bin
-.env
->>>>>>> frontend
 
 # Editor directories and files
 .vscode/*
