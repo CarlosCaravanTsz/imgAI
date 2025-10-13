@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"bytes"
 
 	l "github.com/CarlosCaravanTsz/imgAI/internal/logger"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -17,9 +18,16 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+type FotoUpload struct {
+	Filename string
+	Path     string
+	Buffer   []byte
+}
+
 type S3Client struct {
 	Client *s3.Client
 	Bucket string
+	Endpoint string
 }
 
 func NewS3Client() (*S3Client, error) {
@@ -65,26 +73,24 @@ func NewS3Client() (*S3Client, error) {
 			UsePathStyle:     true,
 		}),
 		Bucket: bucket,
+		Endpoint: endpoint,
 	}, nil
 }
 
-func (s *S3Client) Upload(filePath, key string) (string, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return "", err
-	}
+func (s *S3Client) Upload(foto FotoUpload) (string, error) {
 
-	defer file.Close()
+	key := fmt.Sprintf("%s/%s", foto.Path, foto.Filename)
 
-	_, err = s.Client.PutObject(context.TODO(), &s3.PutObjectInput{
+
+	_, err := s.Client.PutObject(context.TODO(), &s3.PutObjectInput{
 		Bucket: &s.Bucket,
 		Key:    &key,
-		Body:   file,
+		Body:   bytes.NewReader(foto.Buffer),
 	})
 	if err != nil {
 		return "", err
 	}
 
-	url := fmt.Sprintf("%s/%s/%s", os.Getenv("S3_ENDPOINT"), s.Bucket, key)
+	url := fmt.Sprintf("%s/%s/%s", s.Endpoint, s.Bucket, key)
 	return url, nil
 }

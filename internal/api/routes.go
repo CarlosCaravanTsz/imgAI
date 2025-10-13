@@ -27,23 +27,23 @@ func RegisterRoutes(r *gin.Engine) {
 
 	fotos := r.Group("/api/fotos")
 	{
-		fotos.POST("/fotos", fotosHandler.SubirFotos)                               // subir una o muchas fotos
-		fotos.GET("/fotos", fotosHandler.ListarFotos)                               // listar fotos order by timestamp
-		fotos.GET("/fotos/:fotoid", fotosHandler.ListarUnaFoto)                         // obtener toda la info de una foto
-		fotos.GET("/fotos/:fotoid/download", fotosHandler.DescargarFoto)                // descargar una foto
-		fotos.DELETE("/fotos/:id", fotosHandler.EliminarFoto)                       // eliminar una foto
-		fotos.PUT("/fotos/:fotoid/favoritos", fotosHandler.ToggleFavorito)              // agregar una foto a favoritos (o quitar)
-		fotos.GET("/fotos/favoritos", fotosHandler.ListarFavoritos)                 // listar fotos favoritos
-		fotos.POST("/fotos/:fotoid/album/:albumid", fotosHandler.AgregarFotoaAlbum) // agregar fotoid a albumid
+		fotos.POST("/", fotosHandler.SubirFotos)                               // subir una o muchas fotos
+		fotos.GET("/", fotosHandler.ListarFotos) // listar fotos order by timestamp - ?email=email
+		fotos.GET("/foto/", fotosHandler.ListarUnaFoto) // obtener toda la info de una foto - ?email=email&id=1
+		//fotos.GET("/:fotoid/download", fotosHandler.DescargarFoto)                // descargar una foto
+		fotos.DELETE("/:id", fotosHandler.EliminarFoto)                       // eliminar una foto
+		fotos.PUT("/:id/favoritos", fotosHandler.ToggleFavorito)              // agregar una foto a favoritos (o quitar)
+		fotos.GET("/favoritos", fotosHandler.ListarFavoritos)                 // listar fotos favoritos
+		fotos.POST("/:fotoid/album/:albumid", fotosHandler.AgregarFotoaAlbum) // agregar fotoid a albumid
 
 	}
 
 	albumes := r.Group("/api/albumes")
 	{
-		albumes.POST("/albumes", albumesHandler.CrearAlbum)                                 // crear un album
-		albumes.GET("/albumes", albumesHandler.ListarAlbumes)                               // listar albumes
-		albumes.GET("/albumes/:albumid/fotos", albumesHandler.ListarFotosAlbum)                  // listar las fotos del album id
-		albumes.DELETE("/albumes/:albumid", albumesHandler.EliminarAlbum)                        // eliminar el album
-		albumes.DELETE("/albumes/:albumid/fotos/:fotoid", albumesHandler.QuitarFotoDeAlbum) // quitar fotoid del album albumid
+		albumes.POST("/", albumesHandler.CrearAlbum)                                 // crear un album
+		albumes.GET("/", albumesHandler.ListarAlbumes) // ?email                       // listar albumes
+		albumes.GET("/:albumid/fotos", albumesHandler.ListarFotosAlbum) // ?email     // listar las fotos del album id
+		albumes.DELETE("/:albumid", albumesHandler.EliminarAlbum)                        // eliminar el album
+		albumes.DELETE("/:albumid/fotos/:fotoid", albumesHandler.QuitarFotoDeAlbum) // quitar fotoid del album albumid
 	}
 }

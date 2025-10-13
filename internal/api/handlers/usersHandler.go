@@ -69,13 +69,17 @@ func (h *UsersRouteHandlers) RegisterUser(c *gin.Context) {
 		Token:        token,
 	}
 
-	db.Create(&usuario)
+	results := db.Create(&usuario)
+
+	if results.Error != nil {
+		c.JSON(500, gin.H{"error": results.Error})
+		return
+	}
 
 	c.JSON(http.StatusAccepted, gin.H{
 		"status": "Usuario creado",
 	})
 
-	return
 }
 
 func (h *UsersRouteHandlers) LoginUser(c *gin.Context) {
@@ -92,7 +96,6 @@ func (h *UsersRouteHandlers) LoginUser(c *gin.Context) {
 	}
 
 	// Find the user by email
-
 	var usuario database.Usuario
 	if err := db.Where("email = ?", loginUser.Email).First(&usuario).Error; err != nil {
 		c.JSON(401, gin.H{"status": "Error: Invalid credentials", "logged": false})
@@ -106,9 +109,8 @@ func (h *UsersRouteHandlers) LoginUser(c *gin.Context) {
 	}
 
 	// TODO If password correct -> get the token and create a JWT
-
 	c.JSON(201, gin.H{"status": "Logged correctly", "logged": true})
-	return
+
 }
 
 func (h *UsersRouteHandlers) LogoutUser(c *gin.Context) {
