@@ -1,6 +1,5 @@
 package main
 
-<<<<<<< HEAD
 import (
 	"github.com/CarlosCaravanTsz/imgAI/internal/api"
 	"github.com/CarlosCaravanTsz/imgAI/internal/database"
@@ -19,7 +18,3 @@ func main() {
 	api.RegisterRoutes(r)
 
 	r.Run(":8081")
-=======
-func main() {
->>>>>>> frontend
-}
