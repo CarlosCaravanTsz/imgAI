@@ -109,7 +109,22 @@ func (h *UsersRouteHandlers) LoginUser(c *gin.Context) {
 	}
 
 	// TODO If password correct -> get the token and create a JWT
+	token, err := auth.GenerateTokenJWT(usuario.ID, usuario.Token, )
+	if err != nil {
+		c.JSON(401, gin.H{"status": "Error: Invalid to create token", "logged": false})
+		return
+	}
+
+
+	// Cookie set
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("Authorization", token, 3600 * 24, "", "", false, true)
+
 	c.JSON(201, gin.H{"status": "Logged correctly", "logged": true})
+
+}
+
+func Validate(c *gin.Context) {
 
 }
 
