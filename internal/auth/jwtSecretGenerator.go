@@ -4,10 +4,9 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"os"
+	"crypto/sha256"
+	"crypto/hmac"
 
-	log "github.com/CarlosCaravanTsz/imgAI/internal/logger"
-	"github.com/sirupsen/logrus"
-	"github.com/joho/godotenv"
 )
 
 func GenerateRandomString() (string, error) {
@@ -19,15 +18,10 @@ func GenerateRandomString() (string, error) {
 }
 
 func GenerateToken(hashedPassword, randomString string) (string, error) {
-	err := godotenv.Load() // dsn := os.Getenv("DATABASE_URL")
-	if err != nil {
-		log.LogError("Error loading .env file in auth", logrus.Fields{
-			"error": err,
-		})
-		return "", err
-	}
+    jwt := os.Getenv("SECRET_JWT")
+    key := []byte(jwt)
 
-	jwt := os.Getenv("SECRET_JWT")
-
-	return hashedPassword + randomString + jwt, nil
+    mac := hmac.New(sha256.New, key)
+    mac.Write([]byte(hashedPassword + randomString))
+    return hex.EncodeToString(mac.Sum(nil)), nil
 }

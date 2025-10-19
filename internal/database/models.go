@@ -18,10 +18,9 @@ type Usuario struct {
 
 type Foto struct {
 	ID          uint    `gorm:"primaryKey"`
-	UsuarioID   uint    `gorm:"not null"`
-	Usuario     Usuario `gorm:"foreignKey:UsuarioID"`
-	AlbumID     *uint
-	Nombre      string
+	UsuarioID   uint     `gorm:"not null"`
+	Usuario     Usuario  `gorm:"constraint:OnDelete:CASCADE;"`
+	Nombre      string	`gorm:"size:255;not null;uniqueIndex:idx_usuario_nombre"`
 	Descripcion string
 	URLArchivo  string    `gorm:"not null"`
 	FechaSubida time.Time `gorm:"autoCreateTime"`
@@ -29,6 +28,7 @@ type Foto struct {
 	Favorito    bool `gorm:"default:false"`
 	TamanoBytes int64
 	Formato     string
+	Albums      []Album   `gorm:"many2many:album_fotos"`
 }
 
 type Album struct {
@@ -38,5 +38,5 @@ type Album struct {
 	Descripcion   string
 	Tipo          string    `gorm:"default:'normal'"`
 	FechaCreacion time.Time `gorm:"autoCreateTime"`
-	Fotos         []Foto    `gorm:"many2many:album_fotos"`
+	Fotos         []Foto    `gorm:"many2many:album_fotos;constraint:OnDelete:CASCADE;"`
 }
