@@ -1,0 +1,33 @@
+# Go build cache & binaries
+*.exe
+*.out
+*.test
+*.log
+bin/
+build/
+tmp/
+
+# Node / frontend
+node_modules/
+ui/
+
+# Version control
+.git
+.gitignore
+
+# System files
+.DS_Store
+.vscode/
+.idea/
+
+# Docker / Compose / docs
+docker-compose.yml
+imagAI_Local_API_Collection.json
+README.md
+
+# Environment
+.env
+.env.example
+
+# Dependency copies
+vendor/

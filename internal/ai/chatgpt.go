@@ -10,8 +10,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"regexp"
+	_ "regexp"
+	"strings"
 
 	l "github.com/CarlosCaravanTsz/imgAI/internal/logger"
 	"github.com/sirupsen/logrus"
@@ -103,7 +104,6 @@ func EncodeImageToBase64Auto(source string) (string, error) {
 }
 
 func ObtainDescription(url string) (*ImageAnalysis, error) {
-
 	if os.Getenv("OPENAI_API_KEY") == "" {
 		l.LogError("OPENAI_API_KEY not set", logrus.Fields{})
 	}
@@ -123,7 +123,7 @@ func ObtainDescription(url string) (*ImageAnalysis, error) {
 				Role: "user",
 				Content: []ChatPart{
 					{Type: "text", Text: `
-Analyze this image and return a JSON object with the following format:
+Give a short description of the image and return a JSON object with the following format:
 {
   "description": "<short human-readable description>",
   "tags": ["tag1", "tag2", "tag3"]
@@ -160,11 +160,17 @@ Analyze this image and return a JSON object with the following format:
 
 	content := chatResp.Choices[0].Message.Content
 
-re := regexp.MustCompile(`\{[\s\S]*\}`)
-jsonStr := re.FindString(content)
-if jsonStr == "" {
-    return nil, fmt.Errorf("no JSON object found in model output")
-}
+	content = strings.TrimSpace(content)
+	content = strings.TrimPrefix(content, "```json")
+	content = strings.TrimPrefix(content, "```")
+	content = strings.TrimSuffix(content, "```")
+	content = strings.TrimSpace(content)
+
+	re := regexp.MustCompile(`\{[\s\S]*\}`)
+	jsonStr := re.FindString(content)
+	if jsonStr == "" {
+		return nil, fmt.Errorf("no JSON object found in model output")
+	}
 
 	// Parse the JSON returned by the model
 	var analysis ImageAnalysis

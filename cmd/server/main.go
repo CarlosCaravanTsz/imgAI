@@ -27,4 +27,5 @@ func main() {
 	// r.Static("/static", "./templates") // Add this line to serve static files
 	
 
-	r.Run(":8081")
+	r.Run(":8080")
+}

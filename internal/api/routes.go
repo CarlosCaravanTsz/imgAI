@@ -1,7 +1,6 @@
 package api
 
 import (
-<<<<<<< HEAD
 	_ "mime/multipart"
 	_ "net/http"
 

@@ -103,7 +103,7 @@ func (h *FotosRouteHandlers) SubirFotos(c *gin.Context) {
 				resultsChan <- uploadResult{Error: fmt.Errorf("AI analysis failed: %v", err)}
 				return
 			}
-			fmt.Print("TAGS RETURNED BEFORE CASTING TO JSON chatAI: ", analysis.Tags)
+			fmt.Print("chatAI Response: ", analysis)
 
 			tagsJSON, err := json.Marshal(analysis.Tags)
 			if err != nil {
