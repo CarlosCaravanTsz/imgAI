@@ -29,16 +29,16 @@
 ### 1. Clonar el repositorio
 
 ### 2. Crea un archivo .env con los sig valores:
-DATABASE_URL=root:123456@tcp(db:3306)/imagAI?parseTime=true
-DB_PASSWORD=123456
-DB_NAME=imagAI
-S3_ENDPOINT=http://s3:9000
-S3_ACCESS_KEY=minioadmin
-S3_SECRET_KEY=minioadmin
-S3_REGION=us-east-1
-S3_BUCKET=imagai
-SECRET_JWT=<some random value>
-OPENAI_API_KEY=<keyvalue>
+- DATABASE_URL=root:123456@tcp(db:3306)/imagAI?parseTime=true
+- DB_PASSWORD=123456
+- DB_NAME=imagAI
+- S3_ENDPOINT=http://s3:9000
+- S3_ACCESS_KEY=minioadmin
+- S3_SECRET_KEY=minioadmin
+- S3_REGION=us-east-1
+- S3_BUCKET=imagai
+- SECRET_JWT=<some random value>
+- OPENAI_API_KEY=<keyvalue>
 
 ### 3. Haz la imagen el servicio api
 Ejecuta el comando: 
@@ -55,9 +55,6 @@ Ejecuta el comando:
 ### 5. Importa la coleccion del servicio en Postman
 
 <img width="572" height="884" alt="image" src="https://github.com/user-attachments/assets/e1138b3b-8df0-49e5-a0be-8f38ff6cbabe" />
-
-
-
 
 
 
