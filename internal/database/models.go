@@ -20,7 +20,7 @@ type Foto struct {
 	ID          uint    `gorm:"primaryKey"`
 	UsuarioID   uint     `gorm:"not null"`
 	Usuario     Usuario  `gorm:"constraint:OnDelete:CASCADE;"`
-	Nombre      string	`gorm:"not null;uniqueIndex:idx_usuario_nombre"`
+	Nombre      string	`gorm:"size:255;not null;uniqueIndex:idx_usuario_nombre"`
 	Descripcion string
 	URLArchivo  string    `gorm:"not null"`
 	FechaSubida time.Time `gorm:"autoCreateTime"`

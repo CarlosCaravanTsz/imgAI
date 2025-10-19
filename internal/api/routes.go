@@ -20,20 +20,18 @@ func RegisterRoutes(r *gin.Engine) {
 		// c.Redirect(http.StatusMovedPermanently, "https:127.0.0.1/5173")
 	})
 
-
 	usuarios := r.Group("/api/users")
 	{
 		usuarios.POST("/auth/register", usersHandler.RegisterUser) // register
 		usuarios.POST("/auth/login", usersHandler.LoginUser)       // login
-	//usuarios.POST("/auth/logout", usersHandler.LogoutUser) // logout
+		// usuarios.POST("/auth/logout", usersHandler.LogoutUser) // logout
 	}
-
 
 	fotos := r.Group("/api/fotos")
 	fotos.Use(m.RequireAuth)
 	{
 		fotos.POST("/", fotosHandler.SubirFotos)        // subir una o muchas fotos
-		fotos.GET("/", fotosHandler.ListarFotos)        // listar fotos order by timestamp 
+		fotos.GET("/", fotosHandler.ListarFotos)        // listar fotos order by timestamp
 		fotos.GET("/foto/", fotosHandler.ListarUnaFoto) // obtener toda la info de una foto - ?id=1
 		// fotos.GET("/:fotoid/download", fotosHandler.DescargarFoto)                // descargar una foto
 		fotos.DELETE("/:id", fotosHandler.EliminarFoto)                       // eliminar una foto

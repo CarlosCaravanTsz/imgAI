@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"regexp"
 
 	l "github.com/CarlosCaravanTsz/imgAI/internal/logger"
 	"github.com/sirupsen/logrus"
@@ -159,13 +160,17 @@ Analyze this image and return a JSON object with the following format:
 
 	content := chatResp.Choices[0].Message.Content
 
+re := regexp.MustCompile(`\{[\s\S]*\}`)
+jsonStr := re.FindString(content)
+if jsonStr == "" {
+    return nil, fmt.Errorf("no JSON object found in model output")
+}
+
 	// Parse the JSON returned by the model
 	var analysis ImageAnalysis
 	if err := json.Unmarshal([]byte(content), &analysis); err != nil {
 		return nil, fmt.Errorf("failed to parse model JSON: %v\nRaw content: %s", err, content)
 	}
-
-	fmt.Print(analysis.Description, analysis.Tags)
 
 	return &analysis, nil
 }

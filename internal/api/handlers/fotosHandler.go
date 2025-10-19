@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"sync"
+"gorm.io/datatypes"
 
 	ai "github.com/CarlosCaravanTsz/imgAI/internal/ai"
 	"github.com/CarlosCaravanTsz/imgAI/internal/database"
@@ -102,10 +103,11 @@ func (h *FotosRouteHandlers) SubirFotos(c *gin.Context) {
 				resultsChan <- uploadResult{Error: fmt.Errorf("AI analysis failed: %v", err)}
 				return
 			}
+			fmt.Print("TAGS RETURNED BEFORE CASTING TO JSON chatAI: ", analysis.Tags)
 
 			tagsJSON, err := json.Marshal(analysis.Tags)
 			if err != nil {
-				resultsChan <- uploadResult{Error: fmt.Errorf("Error readin tags")}
+				resultsChan <- uploadResult{Error: fmt.Errorf("Error reading tags")}
 			}
 
 			//  Obtener la URL de S3 y guardar la informacion de la Foto en la BD
@@ -115,7 +117,7 @@ func (h *FotosRouteHandlers) SubirFotos(c *gin.Context) {
 				Descripcion: analysis.Description,
 				URLArchivo:  url,
 				TamanoBytes: int64(len(fileBytes)),
-				Etiquetas:   tagsJSON,
+				Etiquetas:   datatypes.JSON(tagsJSON),
 				Formato:     "image",
 			}
 
@@ -137,6 +139,7 @@ func (h *FotosRouteHandlers) SubirFotos(c *gin.Context) {
 	for r := range resultsChan {
 		if r.Error != nil {
 			log.LogError("Upload error ocurred", logrus.Fields{"file": r.Filename, "error": r.Error})
+			fmt.Print("ERROR IN AI: ",r.Error)
 			failed = append(failed, r.Filename)
 		} else {
 			uploaded = append(uploaded, r.URL)
@@ -246,16 +249,22 @@ func (h *FotosRouteHandlers) ToggleFavorito(c *gin.Context) {
 
 	db := database.GetConnection()
 
-	err := db.Model(&database.Foto{}).
+result := db.Model(&database.Foto{}).
     Where("usuario_id = ? AND id = ?", usuario.(database.Usuario).ID, fotoid).
-    Update("favorito", gorm.Expr("NOT favorito")).Error
+    Update("favorito", gorm.Expr("NOT favorito"))
 
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "Couldnt toggle favorites 2"})
-		return
-	}
+if result.Error != nil {
+    c.JSON(http.StatusInternalServerError, gin.H{"status": "Database error", "error": result.Error.Error()})
+    return
+}
 
-	c.JSON(http.StatusAccepted, gin.H{"status": "Ok, toggled favorites"})
+if result.RowsAffected == 0 {
+    c.JSON(http.StatusNotFound, gin.H{"status": "Foto not found"})
+    return
+}
+
+	c.JSON(http.StatusAccepted, gin.H{"status": "Favorito toggled successfully"})
+
 }
 
 func (h *FotosRouteHandlers) ListarFavoritos(c *gin.Context) {
@@ -304,8 +313,8 @@ func (h *FotosRouteHandlers) AgregarFotoaAlbum(c *gin.Context) {
 		return
 	}
 
-	usuario, exists := c.Get("user")
-	if !exists {
+	usuario, ok := c.Get("user")
+	if !ok {
 		log.LogError("Error loading multipart form", logrus.Fields{})
 		c.JSON(http.StatusBadRequest, gin.H{"status": "error: User not set in req"})
 		return
@@ -326,10 +335,28 @@ func (h *FotosRouteHandlers) AgregarFotoaAlbum(c *gin.Context) {
 		return
 	}
 
-	if db.Model(&album).Where("id = ?", foto.ID).Association("Fotos").Find(&foto) == nil {
-		c.JSON(http.StatusOK, gin.H{"status": "Foto already in album"})
-		return
-	}
+// count := db.Model(&album).Where("id = ?", foto.ID).Association("Fotos").Count()
+// if count > 0 {
+//     c.JSON(http.StatusOK, gin.H{"status": "Foto already in album"})
+//     return
+// }
+
+var exists bool
+err = db.Raw(`
+    SELECT EXISTS(
+        SELECT 1 FROM album_fotos WHERE album_id = ? AND foto_id = ?
+    )
+`, albumID, fotoID).Scan(&exists).Error
+
+if err != nil {
+    c.JSON(http.StatusInternalServerError, gin.H{"error": "Database check failed"})
+    return
+}
+
+if exists {
+    c.JSON(http.StatusConflict, gin.H{"status": "Foto already in album"})
+    return
+}
 
 	// Associate
 	if err := db.Model(&album).Association("Fotos").Append(&foto); err != nil {
