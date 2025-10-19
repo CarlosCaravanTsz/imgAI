@@ -18,9 +18,9 @@ type Usuario struct {
 
 type Foto struct {
 	ID          uint    `gorm:"primaryKey"`
-	UsuarioID   uint     `gorm:"uniqueIndex:idx_usuario_nombre"`
-	Usuario     Usuario  `gorm:"size:255;uniqueIndex:idx_usuario_nombre"`
-	Nombre      string	`gorm:"unique;not null"`
+	UsuarioID   uint     `gorm:"not null"`
+	Usuario     Usuario  `gorm:"constraint:OnDelete:CASCADE;"`
+	Nombre      string	`gorm:"not null;uniqueIndex:idx_usuario_nombre"`
 	Descripcion string
 	URLArchivo  string    `gorm:"not null"`
 	FechaSubida time.Time `gorm:"autoCreateTime"`

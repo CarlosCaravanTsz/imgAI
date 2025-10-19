@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -8,16 +10,15 @@ import (
 	"strconv"
 	"sync"
 
+	ai "github.com/CarlosCaravanTsz/imgAI/internal/ai"
 	"github.com/CarlosCaravanTsz/imgAI/internal/database"
 	log "github.com/CarlosCaravanTsz/imgAI/internal/logger"
 	s3 "github.com/CarlosCaravanTsz/imgAI/internal/storage"
+	"gorm.io/gorm"
+
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 )
-
-type FotoParams struct { // send as email the current user email
-	Email string `form:"email" json:"email"`
-}
 
 type FotosArray struct {
 	URL string `json:"url"`
@@ -26,6 +27,13 @@ type FotosArray struct {
 type FotosRouteHandlers struct{}
 
 func (h *FotosRouteHandlers) SubirFotos(c *gin.Context) {
+	usuario, exists := c.Get("user")
+	if !exists {
+		log.LogError("Error loading multipart form", logrus.Fields{})
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error: User not set in req"})
+		return
+	}
+
 	form, err := c.MultipartForm()
 	if err != nil {
 		log.LogError("Error loading multipart form", logrus.Fields{"error": err})
@@ -35,12 +43,6 @@ func (h *FotosRouteHandlers) SubirFotos(c *gin.Context) {
 
 	files := form.File["images[]"]
 
-	var params FotoParams
-	if err := c.ShouldBind(&params); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
 	// Inicia Cliente s3:
 	s3Client, err := s3.NewS3Client()
 	if err != nil {
@@ -49,22 +51,7 @@ func (h *FotosRouteHandlers) SubirFotos(c *gin.Context) {
 	}
 
 	// Inicializa conn a DB
-	db, err := database.GetConnection()
-	if err != nil {
-		log.LogInfo("Error getting the db conn", logrus.Fields{})
-	}
-
-	// Valida que el usuario exista: Buscar el user con el email y obtener ID
-	var usuario struct {
-		ID     uint
-		Nombre string
-	}
-
-	err = db.Model(&database.Usuario{}).Select("id", "nombre").Where("email = ?", params.Email).First(&usuario).Error
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "User not found"})
-		return
-	}
+	db := database.GetConnection()
 
 	// Creamos channel con tipo
 	type uploadResult struct {
@@ -98,7 +85,7 @@ func (h *FotosRouteHandlers) SubirFotos(c *gin.Context) {
 
 			foto := s3.FotoUpload{
 				Filename: fileHeader.Filename,
-				Path:     params.Email,
+				Path:     usuario.(database.Usuario).Email,
 				Buffer:   fileBytes,
 			}
 
@@ -110,13 +97,25 @@ func (h *FotosRouteHandlers) SubirFotos(c *gin.Context) {
 
 			log.LogInfo("Uploaded to S3", logrus.Fields{"url": url})
 
+			analysis, err := ai.ObtainDescription(url)
+			if err != nil {
+				resultsChan <- uploadResult{Error: fmt.Errorf("AI analysis failed: %v", err)}
+				return
+			}
+
+			tagsJSON, err := json.Marshal(analysis.Tags)
+			if err != nil {
+				resultsChan <- uploadResult{Error: fmt.Errorf("Error readin tags")}
+			}
+
 			//  Obtener la URL de S3 y guardar la informacion de la Foto en la BD
 			dbFoto := database.Foto{
-				UsuarioID:   usuario.ID,
+				UsuarioID:   usuario.(database.Usuario).ID,
 				Nombre:      fileHeader.Filename,
-				Descripcion: "",
+				Descripcion: analysis.Description,
 				URLArchivo:  url,
 				TamanoBytes: int64(len(fileBytes)),
+				Etiquetas:   tagsJSON,
 				Formato:     "image",
 			}
 
@@ -126,8 +125,6 @@ func (h *FotosRouteHandlers) SubirFotos(c *gin.Context) {
 			}
 
 			resultsChan <- uploadResult{URL: url, Filename: fh.Filename, Error: nil}
-
-			c.JSON(http.StatusOK, gin.H{"status": "Ok, Uploaded to S3"})
 		}(fileHeader)
 	}
 
@@ -153,18 +150,20 @@ func (h *FotosRouteHandlers) SubirFotos(c *gin.Context) {
 }
 
 func (h *FotosRouteHandlers) ListarFotos(c *gin.Context) {
-	email := c.Query("email")
+	usuario, exists := c.Get("user")
+	if !exists {
+		log.LogError("Error loading multipart form", logrus.Fields{})
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error: User not set in req"})
+		return
+	}
 
 	var fotos []database.Foto
 
-	db, err := database.GetConnection()
-	if err != nil {
-		log.LogInfo("Error getting the db conn", logrus.Fields{})
-	}
+	db := database.GetConnection()
 
 	// Query only photos for this user
-	err = db.Joins("JOIN usuarios ON usuarios.id = fotos.usuario_id").
-		Where("usuarios.email = ?", email).
+	err := db.Joins("JOIN usuarios ON usuarios.id = fotos.usuario_id").
+		Where("usuarios.email = ?", usuario.(database.Usuario).Email).
 		Find(&fotos).Error
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -182,33 +181,28 @@ func (h *FotosRouteHandlers) ListarFotos(c *gin.Context) {
 }
 
 func (h *FotosRouteHandlers) ListarUnaFoto(c *gin.Context) {
-	email := c.Query("email")
 	fotoid := c.Query("id")
+
+	usuario, exists := c.Get("user")
+	if !exists {
+		log.LogError("Error loading multipart form", logrus.Fields{})
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error: User not set in req"})
+		return
+	}
 
 	var foto database.Foto
 
-	type userInfo struct {
-		ID     uint
-		Nombre string
-	}
-	var usuario userInfo
-	// Buscar el user con el email y obtener ID
+	db := database.GetConnection()
 
-	db, err := database.GetConnection()
+	err := db.Where("usuario_id = ? AND id = ?", usuario.(database.Usuario).ID, fotoid).First(&foto).Error
 	if err != nil {
-		log.LogInfo("Error getting the db conn", logrus.Fields{})
-	}
-
-	err = db.Model(&database.Usuario{}).Select("id", "nombre").Where("email = ?", email).First(&usuario).Error
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "User not found"})
-		return
-	}
-
-	err = db.Where("usuario_id = ? AND id = ?", usuario.ID, fotoid).First(&foto).Error
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "Foto not found"})
-		return
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"status": "error: Foto does not belong to the user"})
+			return
+		} else {
+			c.JSON(http.StatusBadRequest, gin.H{"status": "error: Foto not found"})
+			return
+		}
 	}
 
 	c.JSON(http.StatusOK, foto)
@@ -217,30 +211,16 @@ func (h *FotosRouteHandlers) ListarUnaFoto(c *gin.Context) {
 func (h *FotosRouteHandlers) EliminarFoto(c *gin.Context) {
 	fotoid := c.Param("id")
 
-	var params FotoParams
-	if err := c.ShouldBind(&params); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	usuario, exists := c.Get("user")
+	if !exists {
+		log.LogError("Error loading multipart form", logrus.Fields{})
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error: User not set in req"})
 		return
 	}
 
-	type userInfo struct {
-		ID     uint
-		Nombre string
-	}
-	var usuario userInfo
+	db := database.GetConnection()
 
-	db, err := database.GetConnection()
-	if err != nil {
-		log.LogInfo("Error getting the db conn", logrus.Fields{})
-	}
-
-	err = db.Model(&database.Usuario{}).Select("id", "nombre").Where("email = ?", params.Email).First(&usuario).Error
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "User not found"})
-		return
-	}
-
-	result := db.Where("usuario_id = ? AND id = ?", usuario.ID, fotoid).Delete(&database.Foto{})
+	result := db.Where("usuario_id = ? AND id = ?", usuario.(database.Usuario).ID, fotoid).Delete(&database.Foto{})
 	if result.Error != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"status": "Foto not found with that userid"})
 		return
@@ -257,28 +237,19 @@ func (h *FotosRouteHandlers) EliminarFoto(c *gin.Context) {
 func (h *FotosRouteHandlers) ToggleFavorito(c *gin.Context) {
 	fotoid := c.Param("id")
 
-	db, err := database.GetConnection()
-	if err != nil {
-		log.LogInfo("Error getting the db conn", logrus.Fields{})
-	}
-
-	type fotoFavorito struct {
-		Favorito bool
-	}
-	var fav fotoFavorito
-
-	result := db.Model(&database.Foto{}).Where("id = ?", fotoid).Select("Favorito").Find(&fav)
-	if result.Error != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "Didnt find foto with that id"})
+	usuario, exists := c.Get("user")
+	if !exists {
+		log.LogError("Error loading multipart form", logrus.Fields{})
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error: User not set in req"})
 		return
 	}
 
-	if result.RowsAffected == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "No foto found"})
-		return
-	}
+	db := database.GetConnection()
 
-	err = db.Model(&database.Foto{}).Where("id = ?", fotoid).Update("Favorito", !fav.Favorito).Error
+	err := db.Model(&database.Foto{}).
+    Where("usuario_id = ? AND id = ?", usuario.(database.Usuario).ID, fotoid).
+    Update("favorito", gorm.Expr("NOT favorito")).Error
+
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"status": "Couldnt toggle favorites 2"})
 		return
@@ -288,18 +259,19 @@ func (h *FotosRouteHandlers) ToggleFavorito(c *gin.Context) {
 }
 
 func (h *FotosRouteHandlers) ListarFavoritos(c *gin.Context) {
-	email := c.Query("email")
-
 	var fotos []database.Foto
 
-	db, err := database.GetConnection()
-	if err != nil {
-		log.LogInfo("Error getting the db conn", logrus.Fields{})
+	usuario, exists := c.Get("user")
+	if !exists {
+		log.LogError("Error loading multipart form", logrus.Fields{})
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error: User not set in req"})
 	}
 
+	db := database.GetConnection()
+
 	// Query only photos for this user
-	err = db.Joins("JOIN usuarios ON usuarios.id = fotos.usuario_id").
-		Where("usuarios.email = ? AND fotos.favorito=1", email).
+	err := db.Joins("JOIN usuarios ON usuarios.id = fotos.usuario_id").
+		Where("usuarios.email = ? AND fotos.favorito=1", usuario.(database.Usuario).Email).
 		Find(&fotos).Error
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -332,39 +304,24 @@ func (h *FotosRouteHandlers) AgregarFotoaAlbum(c *gin.Context) {
 		return
 	}
 
-	db, err := database.GetConnection()
-	if err != nil {
-		log.LogInfo("Error getting the db conn", logrus.Fields{})
-	}
-
-	// Get userID for validations
-	var params FotoParams
-	type userInfo struct {
-		ID uint
-	}
-	var usuario userInfo
-
-	if err := c.ShouldBind(&params); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	usuario, exists := c.Get("user")
+	if !exists {
+		log.LogError("Error loading multipart form", logrus.Fields{})
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error: User not set in req"})
 		return
 	}
 
-	// Buscar el user con el email y obtener ID
-	err = db.Model(&database.Usuario{}).Select("id").Where("email = ?", params.Email).First(&usuario).Error
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "User not found"})
-		return
-	}
+	db := database.GetConnection()
 
 	// Find album and foto
 	var album database.Album
-	if err := db.Where("id = ? AND usuario_id = ?", albumID, usuario.ID).First(&album).Error; err != nil {
+	if err := db.Where("id = ? AND usuario_id = ?", albumID, usuario.(database.Usuario).ID).First(&album).Error; err != nil {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Album not found or does not belong to user"})
 		return
 	}
 
 	var foto database.Foto
-	if err := db.Where("id = ? AND usuario_id = ?", fotoID, usuario.ID).First(&foto).Error; err != nil {
+	if err := db.Where("id = ? AND usuario_id = ?", fotoID, usuario.(database.Usuario).ID).First(&foto).Error; err != nil {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Foto not found or does not belong to user"})
 		return
 	}

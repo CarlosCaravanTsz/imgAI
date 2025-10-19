@@ -6,52 +6,40 @@ import (
 
 	"github.com/CarlosCaravanTsz/imgAI/internal/database"
 	log "github.com/CarlosCaravanTsz/imgAI/internal/logger"
+	_ "github.com/aws/aws-sdk-go-v2/aws/retry"
 	"github.com/gin-gonic/gin"
 	"github.com/sirupsen/logrus"
 )
 
-type AlbumParams struct {
-	Nombre string `form:"nombre" json:"nombre"`
-	Email  string `form:"email" json:"email"`
-}
-
 type AlbumArray struct {
-	Nombre      string
-	Descripcion string
+		Nombre      string `form:"name" json:"name" `
+		Descripcion string `form:"description" json:"description" `
 }
 
 type AlbumesRouteHandlers struct{}
 
 func (h *AlbumesRouteHandlers) CrearAlbum(c *gin.Context) {
-	var params AlbumParams
+	var body AlbumArray
 
-	if err := c.ShouldBind(&params); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	if err := c.ShouldBind(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": err.Error(),
+		})
 		return
 	}
 
-	db, err := database.GetConnection()
-	if err != nil {
-		log.LogInfo("Error getting the db conn", logrus.Fields{})
-	}
-
-	type userInfo struct {
-		ID     uint
-		Nombre string
-	}
-
-	var usuario userInfo
-	// Buscar el user con el email y obtener ID
-	err = db.Model(&database.Usuario{}).Select("id", "nombre").Where("email = ?", params.Email).First(&usuario).Error
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "User not found"})
+	usuario, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error: User not set in req"})
 		return
 	}
+
+	db := database.GetConnection()
 
 	dbAlbum := database.Album{
-		UsuarioID:   usuario.ID,
-		Nombre:      params.Nombre,
-		Descripcion: "",
+		UsuarioID:   usuario.(database.Usuario).ID,
+		Nombre:      body.Nombre,
+		Descripcion: body.Descripcion,
 	}
 
 	results := db.Create(&dbAlbum)
@@ -64,69 +52,56 @@ func (h *AlbumesRouteHandlers) CrearAlbum(c *gin.Context) {
 }
 
 func (h *AlbumesRouteHandlers) ListarAlbumes(c *gin.Context) {
-	email := c.Query("email")
-
 	var albums []database.Album
 
-	db, err := database.GetConnection()
-	if err != nil {
-		log.LogInfo("Error getting the db conn", logrus.Fields{})
-	}
-
-	type userInfo struct {
-		ID     uint
-		Nombre string
-	}
-
-	var usuario userInfo
-	// Buscar el user con el email y obtener ID
-	err = db.Model(&database.Usuario{}).Select("id", "nombre").Where("email = ?", email).First(&usuario).Error
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "User not found"})
+	usuario, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error: User not set in req"})
 		return
 	}
+
+	db := database.GetConnection()
+
 
 	results := db.Joins("JOIN usuarios ON usuarios.id = albums.usuario_id").
-		Where("usuarios.email = ?", email).
+		Where("usuarios.email = ?", usuario.(database.Usuario).Email).
 		Find(&albums)
 	if results.Error != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting the association"})
 		return
 	}
 
-	urls := make([]AlbumArray, len(albums))
+
+	type AlbumStruct struct {
+		ID uint
+		Nombre string
+		Descripcion string
+	}
+
+	urls := make([]AlbumStruct, len(albums))
 
 	for i, a := range albums {
-		urls[i] = AlbumArray{Nombre: a.Nombre, Descripcion: a.Descripcion}
+		urls[i] = AlbumStruct{ID: a.ID, Nombre: a.Nombre, Descripcion: a.Descripcion}
 	}
 
 	c.JSON(http.StatusOK, urls)
 }
 
 func (h *AlbumesRouteHandlers) ListarFotosAlbum(c *gin.Context) {
-	email := c.Query("email")
 	albumid := c.Param("albumid")
 
-	db, err := database.GetConnection()
-	if err != nil {
-		log.LogInfo("Error getting the db conn", logrus.Fields{})
-	}
-
-	type userInfo struct {
-		ID     uint
-		Nombre string
-	}
-
-	var usuario userInfo
-	// Buscar el user con el email y obtener ID
-	err = db.Model(&database.Usuario{}).Select("id", "nombre").Where("email = ?", email).First(&usuario).Error
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "User not found"})
+	usuario, exists := c.Get("user")
+	if !exists {
+		log.LogError("Error loading multipart form", logrus.Fields{})
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error: User not set in req"})
 		return
 	}
 
+	db := database.GetConnection()
+
 	var album database.Album
-	results := db.Preload("Fotos").Where("id = ? AND usuario_id = ?", albumid, usuario.ID).First(&album)
+
+	results := db.Preload("Fotos").Where("id = ? AND usuario_id = ?", albumid, usuario.(database.Usuario).ID).First(&album)
 
 	if results.Error != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Álbum no encontrado o no pertenece al usuario"})
@@ -137,28 +112,19 @@ func (h *AlbumesRouteHandlers) ListarFotosAlbum(c *gin.Context) {
 }
 
 func (h *AlbumesRouteHandlers) EliminarAlbum(c *gin.Context) {
-	email := c.Query("email")
 	albumID := c.Param("albumid")
-	type userInfo struct {
-		ID     uint
-		Nombre string
-	}
 
-	db, err := database.GetConnection()
-	if err != nil {
-		log.LogInfo("Error getting the db conn", logrus.Fields{})
-	}
-
-	var usuario userInfo
-	// Buscar el user con el email y obtener ID
-	err = db.Model(&database.Usuario{}).Select("id", "nombre").Where("email = ?", email).First(&usuario).Error
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "User not found"})
+	usuario, exists := c.Get("user")
+	if !exists {
+		log.LogError("Error loading multipart form", logrus.Fields{})
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error: User not set in req"})
 		return
 	}
 
+	db := database.GetConnection()
+
 	var album database.Album
-	if err := db.Where("id = ? AND usuario_id = ?", albumID, usuario.ID).First(&album).Error; err != nil {
+	if err := db.Where("id = ? AND usuario_id = ?", albumID, usuario.(database.Usuario).ID).First(&album).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Álbum no encontrado o no pertenece al usuario"})
 		return
 	}
@@ -177,30 +143,20 @@ func (h *AlbumesRouteHandlers) EliminarAlbum(c *gin.Context) {
 }
 
 func (h *AlbumesRouteHandlers) QuitarFotoDeAlbum(c *gin.Context) {
-	email := c.Query("email")
 	albumID := c.Param("albumid")
 	fotoID := c.Param("fotoid")
 
-	db, err := database.GetConnection()
-	if err != nil {
-		log.LogInfo("Error getting the db conn", logrus.Fields{})
-	}
-
-	type userInfo struct {
-		ID     uint
-		Nombre string
-	}
-
-	var usuario userInfo
-	// Buscar el user con el email y obtener ID
-	err = db.Model(&database.Usuario{}).Select("id", "nombre").Where("email = ?", email).First(&usuario).Error
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "User not found"})
+	usuario, exists := c.Get("user")
+	if !exists {
+		log.LogError("Error loading multipart form", logrus.Fields{})
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error: User not set in req"})
 		return
 	}
 
+	db := database.GetConnection()
+
 	var album database.Album
-	if err := db.Where("id = ? AND usuario_id = ?", albumID, usuario.ID).First(&album).Error; err != nil {
+	if err := db.Where("id = ? AND usuario_id = ?", albumID, usuario.(database.Usuario).ID).First(&album).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Álbum no encontrado o no pertenece al usuario"})
 		return
 	}

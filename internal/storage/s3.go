@@ -6,7 +6,6 @@ import (
 	"os"
 	"bytes"
 
-	l "github.com/CarlosCaravanTsz/imgAI/internal/logger"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	_ "github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -14,8 +13,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	_ "github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/joho/godotenv"
-	"github.com/sirupsen/logrus"
 )
 
 type FotoUpload struct {
@@ -31,11 +28,6 @@ type S3Client struct {
 }
 
 func NewS3Client() (*S3Client, error) {
-	if err := godotenv.Load(); err != nil {
-		l.LogInfo("Error while uploading ENV vars", logrus.Fields{
-			"error": err,
-		})
-	}
 
 	endpoint := os.Getenv("S3_ENDPOINT")
 	region := os.Getenv("S3_REGION")

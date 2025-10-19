@@ -7,12 +7,15 @@ import (
 
 	"github.com/CarlosCaravanTsz/imgAI/internal/auth"
 	"github.com/CarlosCaravanTsz/imgAI/internal/database"
-	log "github.com/CarlosCaravanTsz/imgAI/internal/logger"
 	"github.com/gin-gonic/gin"
-	"github.com/sirupsen/logrus"
+	"github.com/golang-jwt/jwt/v5"
 )
 
-
+// Claims mínimos que esperas en el token
+type MyClaims struct {
+	Email string `json:"email"`
+	jwt.RegisteredClaims
+}
 
 func RequireAuth(c *gin.Context) {
 	fmt.Println("In middleware")
@@ -21,47 +24,41 @@ func RequireAuth(c *gin.Context) {
 	tokenString, err := c.Cookie("Authorization")
 	if err != nil {
 		c.AbortWithStatus(http.StatusUnauthorized)
+		return
 	}
+
+	// Obtener email desde los claims de la Cookie JWT 
+
+	claims, err := auth.ExtractClaimsWithoutVerify(tokenString)
+	if err != nil {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"status": "Error: Invalid token"})
+		return
+	}
+
+	email := claims["sub"].(string)
 
 	// crear db conn
-	db, err := database.GetConnection()
-	if err != nil {
-		log.LogInfo("Error getting the db conn", logrus.Fields{})
-	}
+	db := database.GetConnection()
 
-	var loginUser struct {
-			Email    string `form:"email" binding:"required,email,max=100"`
-	}
-
-	if err := c.ShouldBind(&loginUser); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
+	// Obtener secret token del usuario
+	var usuario database.Usuario
+	if err := db.Where("email = ?", email).First(&usuario).Error; err != nil {
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"status": "Error: Invalid credentials", "logged": false})
 		return
 	}
-
-		// Obtener el id y el token del usuario
-		var usuario database.Usuario
-	if err := db.Where("email = ?", loginUser.Email).First(&usuario).Error; err != nil {
-		c.JSON(401, gin.H{"status": "Error: Invalid credentials", "logged": false})
-		return
-	}
-
 
 	// Decodificar/validar
-
 	exp, err := auth.ValidateToken(tokenString, usuario.Token)
-
 	if err != nil {
-		c.AbortWithStatus(http.StatusUnauthorized)
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"status": "Error: Invalid credentials", "logged": false})
+		return
 	}
 
 	// Revisar la expiracion
-
 	if float64(time.Now().Unix()) > exp {
-		c.AbortWithStatus(http.StatusUnauthorized)
+		c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"status": "Error: Invalid credentials", "logged": false})
+		return
 	}
-
 
 	// Agregar el userID a la req
 	c.Set("user", usuario)

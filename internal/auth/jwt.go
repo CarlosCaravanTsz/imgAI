@@ -2,13 +2,13 @@ package auth
 
 import (
 	"time"
-
+	"fmt"
 	"github.com/golang-jwt/jwt/v5"
 )
 
-func GenerateTokenJWT(userID uint, secret string) (string, error) {
+func GenerateTokenJWT(email string, secret string) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"sub": userID,
+		"sub": email,
 		"exp": time.Now().Add(time.Hour * 24).Unix(),
 	})
 
@@ -18,6 +18,19 @@ func GenerateTokenJWT(userID uint, secret string) (string, error) {
 	}
 
 	return tokenString, nil
+}
+
+func ExtractClaimsWithoutVerify(tokenString string) (jwt.MapClaims, error) {
+	parser := new(jwt.Parser)
+	token, _, err := parser.ParseUnverified(tokenString, jwt.MapClaims{})
+	if err != nil {
+		return nil, err
+	}
+
+	if claims, ok := token.Claims.(jwt.MapClaims); ok {
+		return claims, nil
+	}
+	return nil, fmt.Errorf("invalid claims type")
 }
 
 func ValidateToken(tokenString string, secret string) (float64, error) {
@@ -34,3 +47,6 @@ func ValidateToken(tokenString string, secret string) (float64, error) {
 		return  0, err
 	}
 }
+
+
+

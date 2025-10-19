@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"fmt"
 	"net/http"
 
 	auth "github.com/CarlosCaravanTsz/imgAI/internal/auth"
@@ -9,30 +8,20 @@ import (
 	log "github.com/CarlosCaravanTsz/imgAI/internal/logger"
 
 	"github.com/sirupsen/logrus"
-
 	"github.com/gin-gonic/gin"
 )
-
-type NewUserForm struct {
-	Nombre   string `form:"nombre" binding:"required,max=100"`
-	Email    string `form:"email" binding:"required,email,max=100"`
-	Password string `form:"password" binding:"required,min=8,max=64"`
-}
-
-type LoginUser struct {
-	Email    string `form:"email" binding:"required,email"`
-	Password string `form:"password" binding:"required"`
-}
 
 type UsersRouteHandlers struct{}
 
 func (h *UsersRouteHandlers) RegisterUser(c *gin.Context) {
-	nombre := c.PostForm("nombre")
-	email := c.PostForm("email")
-	password := c.PostForm("password")
 
-	var newUser NewUserForm
 
+	// Obtienes body values
+	var newUser struct {
+	Name   string `form:"name" json:"name"  binding:"required,max=100"`
+	Email    string `form:"email" json:"email" binding:"required,email,max=100"`
+	Password string `form:"password" json:"password" binding:"required,min=8,max=64"`
+}
 	if err := c.ShouldBind(&newUser); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": err.Error(),
@@ -40,36 +29,46 @@ func (h *UsersRouteHandlers) RegisterUser(c *gin.Context) {
 		return
 	}
 
-	fmt.Print(newUser)
-
-	// hashear password
-	hashedPassword, err := auth.HashPassword(password)
+	// Hashear password
+	hashedPassword, err := auth.HashPassword(newUser.Password)
 	if err != nil {
-		c.JSON(500, gin.H{"error": "Error hashing password"})
+		c.JSON(500, gin.H{"status": "error: Error hashing password"})
+		return
 	}
 
-	// crear token hashedPassword + randomGeneration + env secret
-	s, _ := auth.GenerateRandomString()
-	token, err := auth.GenerateToken(hashedPassword, s)
-	if err != nil {
-		log.LogError("Error loading .env file in auth", logrus.Fields{
+	// crear secret key para firma jwt: hashedPassword + randomGeneration + env secret
+	s, err := auth.GenerateRandomString()
+	if err != nil {		
+		log.LogError("Error generating random string", logrus.Fields{
 			"error": err,
 		})
+		c.JSON(500, gin.H{"status": "error: Error generating random string"})
+		return
+	}
+	token, err := auth.GenerateToken(hashedPassword, s)
+	if err != nil {
+		log.LogError("Error generating user secret key", logrus.Fields{
+			"error": err,
+		})
+		c.JSON(500, gin.H{"status":"error: Error generating user secret key"})
+		return
 	}
 
-	db, err := database.GetConnection()
-	if err != nil {
-		log.LogInfo("Error getting the db conn", logrus.Fields{})
-	}
+	db := database.GetConnection()
 
 	usuario := database.Usuario{
-		Nombre:       nombre,
-		Email:        email,
+		Nombre:       newUser.Name,
+		Email:        newUser.Email,
 		PasswordHash: hashedPassword,
 		Token:        token,
 	}
 
+	// Creas usuario
 	results := db.Create(&usuario)
+	if results.Error != nil {
+			c.JSON(500, gin.H{"error": results.Error})
+		return
+	}
 
 	if results.Error != nil {
 		c.JSON(500, gin.H{"error": results.Error})
@@ -83,17 +82,18 @@ func (h *UsersRouteHandlers) RegisterUser(c *gin.Context) {
 }
 
 func (h *UsersRouteHandlers) LoginUser(c *gin.Context) {
-	var loginUser LoginUser
+
+	var loginUser struct {
+	Email    string `form:"email" json:"email" binding:"required,email"`
+	Password string `form:"password" json:"password" binding:"required"`
+}
 
 	if err := c.ShouldBind(&loginUser); err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
 
-	db, err := database.GetConnection()
-	if err != nil {
-		log.LogInfo("Error getting the db conn", logrus.Fields{})
-	}
+	db := database.GetConnection()
 
 	// Find the user by email
 	var usuario database.Usuario
@@ -108,27 +108,40 @@ func (h *UsersRouteHandlers) LoginUser(c *gin.Context) {
 		return
 	}
 
-	// TODO If password correct -> get the token and create a JWT
-	token, err := auth.GenerateTokenJWT(usuario.ID, usuario.Token, )
+	// Genera token
+	token, err := auth.GenerateTokenJWT(usuario.Email, usuario.Token )
 	if err != nil {
 		c.JSON(401, gin.H{"status": "Error: Invalid to create token", "logged": false})
 		return
 	}
 
-
-	// Cookie set
+	// Setear cookie HTTP only
 	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie("Authorization", token, 3600 * 24, "", "", false, true)
+	c.SetCookie("Authorization", token, 3600 * 24, "", "", true, true)
 
 	c.JSON(201, gin.H{"status": "Logged correctly", "logged": true})
 
 }
 
-func Validate(c *gin.Context) {
-
+func GetUser(c *gin.Context) (*database.Usuario, bool) {
+    u, exists := c.Get("user")
+    if !exists {
+        c.JSON(http.StatusUnauthorized, gin.H{"error": "User not set"})
+        return nil, false
+    }
+    user, ok := u.(database.Usuario)
+    if !ok {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid user type"})
+        return nil, false
+    }
+    return &user, true
 }
 
-func (h *UsersRouteHandlers) LogoutUser(c *gin.Context) {
+// func (h *UsersRouteHandlers) LogoutUser(c *gin.Context) {
 
-	// quitar el estado en el front
-}
+ 	// quitar el estado en el front
+// }
+
+
+
+
